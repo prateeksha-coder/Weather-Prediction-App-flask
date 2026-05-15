@@ -1,57 +1,51 @@
+# Mandatory components to be imported
 from flask import Flask, render_template, request
+# To view the flask response, which contains json data
 import json
+# Used for fetching URLs
 import urllib.request
-from urllib.parse import quote
 
+# Name the current component
 app = Flask(__name__)
 
-def fetch_json(url):
-    with urllib.request.urlopen(url) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-@app.route("/getweather", methods=["POST", "GET"])
+# This route method binds URL only when submit button is clicked in the POST or GET method. This route URL will be mentioned in form action of html template.
+@app.route('/getweather', methods=['POST','GET'])
 def weather():
-    location = request.form.get("city", "").strip() if request.method == "POST" else "Chennai"
-    if not location:
-        return render_template("index.html", error="Please enter a city name.")
+    # check if the method is POST or not
+    if request.method == 'POST':
+        location = request.form['city']
+    # not necessary as the Exception is handled if no exception give any default city name
+    else:
+        location = 'chennai'
+    # Assign your api key generated to the new variable
+    api = "2431e6b28a69b3acd587e9072b4d0fed"
 
     try:
-        # 1) City -> lat/lon (Open-Meteo Geocoding)
-        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={quote(location)}&count=1&language=en&format=json"
-        geo_data = fetch_json(geo_url)
+        # call url with location and api key
+        source = urllib.request.urlopen('http://api.openweathermap.org/data/2.5/weather?q='+location+'&appid='+api).read()
 
-        if not geo_data.get("results"):
-            return render_template("index.html", error="City not found. Try another one.")
+        # convert the response into python dictionary
+        response_data = json.loads(source)
 
-        place = geo_data["results"][0]
-        lat = place["latitude"]
-        lon = place["longitude"]
-
-        # These exist in geocoding response
-        city_name = place.get("name", location)
-        country_code = place.get("country_code", "").upper()
-
-        # 2) Current weather (Open-Meteo Forecast)
-        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
-        weather_data = fetch_json(weather_url)
-
-        current_weather = weather_data.get("current_weather", {})
-        temp_c = current_weather.get("temperature")  # in °C
-
+        # store the data you needed in an array
         data = {
-            "country_code": country_code if country_code else "N/A",
-            "temp": f"{temp_c} °C" if temp_c is not None else "N/A",
-            "location": city_name,
+            "country_code": str(response_data['sys']['country']),
+            "temp": str(response_data['main']['temp']) + 'K',
+            "location": str(response_data['name']),
         }
 
-        return render_template("index.html", data=data)
+        # pass the array to html template
+        return render_template('index.html', data=data)
 
-    except Exception:
-        return render_template("index.html", error="Something went wrong. Please try again.")
+    # exception handling
+    except (Exception):
+        # pass the error message that need to be displayed in html template
+        return render_template('index.html', error="Give the correct location")
 
-@app.route("/")
+# route method that need to be called on first hit to render my html template
+@app.route('/',)
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+# Mention the port where the flask app should run
+app.run(host='0.0.0.0', port=8080)
