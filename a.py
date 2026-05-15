@@ -1,58 +1,57 @@
 from flask import Flask, render_template, request
-import requests
+import json
+import urllib.request
+from urllib.parse import quote
 
 app = Flask(__name__)
 
-# Replace with your OpenWeatherMap API key
-API_KEY = ""
+def fetch_json(url):
+    with urllib.request.urlopen(url) as response:
+        return json.loads(response.read().decode("utf-8"))
 
-# Home route to display the form
+@app.route("/getweather", methods=["POST", "GET"])
+def weather():
+    location = request.form.get("city", "").strip() if request.method == "POST" else "Chennai"
+    if not location:
+        return render_template("index.html", error="Please enter a city name.")
+
+    try:
+        # 1) City -> lat/lon (Open-Meteo Geocoding)
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={quote(location)}&count=1&language=en&format=json"
+        geo_data = fetch_json(geo_url)
+
+        if not geo_data.get("results"):
+            return render_template("index.html", error="City not found. Try another one.")
+
+        place = geo_data["results"][0]
+        lat = place["latitude"]
+        lon = place["longitude"]
+
+        # These exist in geocoding response
+        city_name = place.get("name", location)
+        country_code = place.get("country_code", "").upper()
+
+        # 2) Current weather (Open-Meteo Forecast)
+        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+        weather_data = fetch_json(weather_url)
+
+        current_weather = weather_data.get("current_weather", {})
+        temp_c = current_weather.get("temperature")  # in °C
+
+        data = {
+            "country_code": country_code if country_code else "N/A",
+            "temp": f"{temp_c} °C" if temp_c is not None else "N/A",
+            "location": city_name,
+        }
+
+        return render_template("index.html", data=data)
+
+    except Exception:
+        return render_template("index.html", error="Something went wrong. Please try again.")
+
 @app.route("/")
-def home():
+def index():
     return render_template("index.html")
 
-# Route to fetch and display weather details
-@app.route("/get_weather", methods=["POST"])
-def get_weather():
-    city = request.form.get("city")
-
-    # Validate the input city name
-    if not city or not validate_city_name(city):
-        return render_template("index.html", error="Please enter a valid city name!")
-
-    # API Request to OpenWeatherMap
-    base_url = "http://api.openweathermap.org/data/2.5/weather"
-    params = {
-        "q": city,
-        "appid": API_KEY,
-        "units": "metric"  # For temperature in Celsius
-    }
-    response = requests.get(base_url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-        weather = {
-            "city": data["name"],
-            "description": data["weather"][0]["description"],
-            "temperature": data["main"]["temp"],
-            "humidity": data["main"]["humidity"],
-            "wind_speed": data["wind"]["speed"],
-            "icon": f"http://openweathermap.org/img/wn/{data['weather'][0]['icon']}@2x.png"
-        }
-        return render_template("index.html", weather=weather)
-    elif response.status_code == 404:
-        return render_template("index.html", error="City not found! Please check the name.")
-    else:
-        return render_template("index.html", error="Unable to fetch weather data at the moment. Please try again later.")
-
-# Function to validate the city name
-def validate_city_name(city):
-    """
-    Validates the city name input.
-    Allows alphabetic characters and spaces.
-    """
-    return all(part.isalpha() for part in city.split()) and len(city) > 1
-
-# Run the Flask application
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=True)
