@@ -30,7 +30,7 @@ def weather():
         # store the data you needed in an array
         data = {
             "country_code": str(response_data['sys']['country']),
-            "temp": str(response_data['main']['temp']) + 'K',
+            "temp": str(round(response_data['main']['temp'] - 273.15, 2)) + ' °C',
             "location": str(response_data['name']),
         }
 
